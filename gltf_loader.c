@@ -1235,7 +1235,7 @@ void DrawCustomModel(CustomModel model, Matrix transform, Matrix* boneTransforms
         printf("  Vertex array object ID: %u\n", meshGPU->mesh.vaoId);
 
         printf("Drawing mesh\n");
-        if (meshGPU->vaoId > 0) {
+        if (meshGPU->mesh.vaoId > 0) {
             BeginShaderMode(basicShader);
             DrawMesh(meshGPU->mesh, LoadMaterialDefault(), transform);
             EndShaderMode();
@@ -1330,6 +1330,7 @@ void UploadCustomMesh(CustomMesh* mesh, CustomMeshGPU* meshGPU) {
     UploadMesh(&meshGPU->mesh, false);
 
     printf("Mesh uploaded. VAO ID: %u\n", meshGPU->mesh.vaoId);
+    meshGPU->vaoId = meshGPU->mesh.vaoId;  // Ensure we set the VAO ID in both places
 
     printf("Exiting UploadCustomMesh\n");
 }
