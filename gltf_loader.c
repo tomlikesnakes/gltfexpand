@@ -171,36 +171,40 @@ const char* vertexShaderSkinning =
     "in vec3 vertexPosition;\n"
     "in vec3 vertexNormal;\n"
     "in vec2 vertexTexCoord;\n"
-    "in vec4 vertexColor;\n"
-    "in vec4 vertexTangent;\n"
-    "in ivec4 vertexBoneIds;\n"
+    "in vec4 vertexBoneIds;\n"
     "in vec4 vertexBoneWeights;\n"
     "uniform mat4 mvp;\n"
     "uniform mat4 boneTransforms[256];\n"
-    "out vec3 fragPosition;\n"
     "out vec2 fragTexCoord;\n"
     "out vec3 fragNormal;\n"
-    "out vec4 fragColor;\n"
-    "out mat3 TBN;\n"
     "void main()\n"
     "{\n"
     "    mat4 skinMatrix = mat4(0.0);\n"
     "    for(int i = 0; i < 4; i++)\n"
     "    {\n"
-    "        skinMatrix += boneTransforms[vertexBoneIds[i]] * vertexBoneWeights[i];\n"
+    "        skinMatrix += boneTransforms[int(vertexBoneIds[i])] * vertexBoneWeights[i];\n"
     "    }\n"
     "    vec4 skinnedPosition = skinMatrix * vec4(vertexPosition, 1.0);\n"
     "    vec3 skinnedNormal = mat3(skinMatrix) * vertexNormal;\n"
-    "    vec3 skinnedTangent = mat3(skinMatrix) * vertexTangent.xyz;\n"
     "    gl_Position = mvp * skinnedPosition;\n"
-    "    fragPosition = skinnedPosition.xyz;\n"
     "    fragTexCoord = vertexTexCoord;\n"
     "    fragNormal = normalize(skinnedNormal);\n"
-    "    fragColor = vertexColor;\n"
-    "    vec3 N = normalize(skinnedNormal);\n"
-    "    vec3 T = normalize(skinnedTangent);\n"
-    "    vec3 B = normalize(cross(N, T)) * vertexTangent.w;\n"
-    "    TBN = mat3(T, B, N);\n"
+    "}\n";
+
+// Simplified Fragment Shader
+const char* fragmentShaderBasic =
+    "#version 330\n"
+    "in vec2 fragTexCoord;\n"
+    "in vec3 fragNormal;\n"
+    "uniform sampler2D texture0;\n"
+    "uniform vec4 colDiffuse;\n"
+    "out vec4 finalColor;\n"
+    "void main()\n"
+    "{\n"
+    "    vec4 texelColor = texture(texture0, fragTexCoord);\n"
+    "    vec3 lightDir = normalize(vec3(0.5, 1.0, -0.3));\n"
+    "    float diffuse = max(dot(fragNormal, lightDir), 0.0);\n"
+    "    finalColor = texelColor * colDiffuse * (diffuse * 0.8 + 0.2);\n"
     "}\n";
 
 const char* fragmentShaderPBR =
@@ -859,10 +863,8 @@ void LoadCustomMaterials(cgltf_data* data, CustomModel* model, TextureCache* tex
         printf("No materials found in glTF file. Creating a default material.\n");
         model->materialCount = 1;
         model->materials = (CustomMaterial*)calloc(1, sizeof(CustomMaterial));
-        model->materials[0].shader = LoadShaderFromMemory(vertexShaderSkinning, fragmentShaderPBR);
+        model->materials[0].shader = LoadShaderFromMemory(vertexShaderSkinning, fragmentShaderBasic);
         model->materials[0].color = WHITE;
-        model->materials[0].metallic = 0.0f;
-        model->materials[0].roughness = 0.5f;
         return;
     }
 
@@ -879,7 +881,7 @@ void LoadCustomMaterials(cgltf_data* data, CustomModel* model, TextureCache* tex
         printf("Loading material %d\n", i);
 
         // Load shader
-        mat->shader = LoadShaderFromMemory(vertexShaderSkinning, fragmentShaderPBR);
+        mat->shader = LoadShaderFromMemory(vertexShaderSkinning, fragmentShaderBasic);
 
         // Set material properties
         if (cgltfMat->has_pbr_metallic_roughness) {
@@ -900,48 +902,22 @@ void LoadCustomMaterials(cgltf_data* data, CustomModel* model, TextureCache* tex
                     mat->albedoMap = LoadTextureFromImageUri(basePath, uri);
                 }
             }
-
-            // Metallic and roughness
-            mat->metallic = pbr->metallic_factor;
-            mat->roughness = pbr->roughness_factor;
-
-            // Metallic-Roughness texture
-            if (pbr->metallic_roughness_texture.texture && pbr->metallic_roughness_texture.texture->image) {
-                const char* uri = pbr->metallic_roughness_texture.texture->image->uri;
-                if (uri) {
-                    mat->metallicRoughnessMap = LoadTextureFromImageUri(basePath, uri);
-                }
-            }
+        } else {
+            mat->color = WHITE;
         }
 
-        // Normal map
-        if (cgltfMat->normal_texture.texture && cgltfMat->normal_texture.texture->image) {
-            const char* uri = cgltfMat->normal_texture.texture->image->uri;
-            if (uri) {
-                mat->normalMap = LoadTextureFromImageUri(basePath, uri);
-            }
+        // If no albedo map was loaded, create a 1x1 white texture
+        if (mat->albedoMap.id == 0) {
+            Image whiteImage = GenImageColor(1, 1, WHITE);
+            mat->albedoMap = LoadTextureFromImage(whiteImage);
+            UnloadImage(whiteImage);
         }
 
-        // Occlusion map
-        if (cgltfMat->occlusion_texture.texture && cgltfMat->occlusion_texture.texture->image) {
-            const char* uri = cgltfMat->occlusion_texture.texture->image->uri;
-            if (uri) {
-                mat->occlusionMap = LoadTextureFromImageUri(basePath, uri);
-            }
-        }
-
-        // Emissive map and factor
-        if (cgltfMat->emissive_texture.texture && cgltfMat->emissive_texture.texture->image) {
-            const char* uri = cgltfMat->emissive_texture.texture->image->uri;
-            if (uri) {
-                mat->emissiveMap = LoadTextureFromImageUri(basePath, uri);
-            }
-        }
-                printf("Finished loading material %d\n", i);
-
-        memcpy(mat->emissiveFactor, cgltfMat->emissive_factor, sizeof(float) * 3);
+        printf("Finished loading material %d\n", i);
     }
 }
+
+
 
 Texture2D LoadTextureFromImageUri(const char* basePath, const char* uri) {
     char fullPath[512];
@@ -1186,17 +1162,6 @@ void DrawCustomModel(CustomModel model, Matrix transform, Matrix* boneTransforms
         return;
     }
 
-    // Create a basic shader
-    Shader basicShader = LoadShaderFromMemory(basicVertexShader, basicFragmentShader);
-    printf("Created basic shader with ID: %u\n", basicShader.id);
-
-    // Get shader locations
-    int mvpLoc = GetShaderLocation(basicShader, "mvp");
-    int colorLoc = GetShaderLocation(basicShader, "colDiffuse");
-
-    printf("Shader locations: mvp = %d, colDiffuse = %d\n", mvpLoc, colorLoc);
-
-    printf("Calculating view projection matrix\n");
     Matrix viewProjection = GetCameraMatrix(camera);
     Matrix projection = MatrixPerspective(camera.fovy * DEG2RAD,
                                           (double)GetScreenWidth() / GetScreenHeight(),
@@ -1206,7 +1171,6 @@ void DrawCustomModel(CustomModel model, Matrix transform, Matrix* boneTransforms
 
     printf("Looping through meshes (count: %d)\n", model.meshCount);
     for (int i = 0; i < model.meshCount; i++) {
-        printf("Processing mesh %d\n", i);
         CustomMeshGPU* meshGPU = &model.meshesGPU[i];
         
         if (model.meshMaterial == NULL) {
@@ -1220,32 +1184,28 @@ void DrawCustomModel(CustomModel model, Matrix transform, Matrix* boneTransforms
             continue;
         }
 
-        printf("Setting shader uniforms\n");
+        CustomMaterial* material = &model.materials[materialIndex];
+        Shader shader = material->shader;
+
+        // Set shader uniforms
         Matrix mvp = MatrixMultiply(transform, viewProjection);
-        SetShaderValueMatrix(basicShader, mvpLoc, mvp);
+        SetShaderValueMatrix(shader, GetShaderLocation(shader, "mvp"), mvp);
+        SetShaderValueMatrix(shader, GetShaderLocation(shader, "matModel"), transform);
+        SetShaderValueMatrixArray(shader, GetShaderLocation(shader, "boneTransforms"), boneTransforms, model.boneCount);
+        
+        // Set material properties
+        SetShaderValue(shader, GetShaderLocation(shader, "colDiffuse"), &material->color, SHADER_UNIFORM_VEC4);
 
-        // Set a default color
-        Vector4 color = { 1.0f, 1.0f, 1.0f, 1.0f };
-        SetShaderValue(basicShader, colorLoc, &color, SHADER_UNIFORM_VEC4);
-
-        printf("Checking mesh data:\n");
-        printf("  Vertex count: %d\n", meshGPU->mesh.vertexCount);
-        printf("  Triangle count: %d\n", meshGPU->mesh.triangleCount);
-        printf("  Vertex buffer object ID: %u\n", meshGPU->mesh.vboId[0]);
-        printf("  Vertex array object ID: %u\n", meshGPU->mesh.vaoId);
-
-        printf("Drawing mesh\n");
+        printf("Drawing mesh %d\n", i);
         if (meshGPU->mesh.vaoId > 0) {
-            BeginShaderMode(basicShader);
+            BeginShaderMode(shader);
+            SetShaderValueTexture(shader, GetShaderLocation(shader, "texture0"), material->albedoMap);
             DrawMesh(meshGPU->mesh, LoadMaterialDefault(), transform);
             EndShaderMode();
         } else {
             printf("Warning: Invalid VAO ID for mesh %d\n", i);
         }
     }
-
-    printf("Unloading basic shader\n");
-    UnloadShader(basicShader);
 
     printf("Exiting DrawCustomModel\n");
 }

@@ -1,0 +1,16 @@
+[
+  {
+    "arguments": [
+      "/usr/bin/gcc",
+      "-c",
+      "-I",
+      "/home/sylla/raylib/src",
+      "-o",
+      "gltf_loader",
+      "gltf_loader.c"
+    ],
+    "directory": "/home/sylla/gltfexpand",
+    "file": "/home/sylla/gltfexpand/gltf_loader.c",
+    "output": "/home/sylla/gltfexpand/gltf_loader"
+  }
+]
