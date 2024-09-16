@@ -1,0 +1,1 @@
+gcc -o gltf_loader gltf_loader.c -I ~/raylib/src -L ~/raylib/src -lraylib -lm -lpthread -ldl -lGL -lX11
